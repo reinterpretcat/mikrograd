@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../tests/unit/modules_test.rs"]
+mod modules_test;
+
 use crate::value::GradientFactory;
 use crate::Value;
 use rand::Rng;

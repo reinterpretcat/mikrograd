@@ -27,6 +27,11 @@ impl Value {
         Self { grad: gradient_fn(), children: vec![], data, backward_fn: None, gradient_fn, op: "".to_string() }
     }
 
+    /// Returns underlying data.
+    pub fn get_data(&self) -> f64 {
+        self.data
+    }
+
     /// Returns a gradient.
     pub fn get_grad(&self) -> f64 {
         *self.grad.borrow()
