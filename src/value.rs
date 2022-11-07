@@ -3,6 +3,8 @@
 mod value_test;
 
 use std::cell::{RefCell, RefMut};
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 use std::ops::{Add, Deref, Div, Mul, Sub};
 use std::rc::Rc;
 
@@ -44,25 +46,22 @@ impl Value {
 
     /// Applies gradients.
     pub fn backward(&self) {
-        /*
-           # topological order all of the children in the graph
-           topo = []
-           visited = set()
-           def build_topo(v):
-               if v not in visited:
-                   visited.add(v)
-                   for child in v._prev:
-                       build_topo(child)
-                   topo.append(v)
-           build_topo(self)
+        // topological order all of the children in the graph
+        let topo = RefCell::new(Vec::new());
+        let visited = RefCell::new(HashSet::new());
 
-           # go one variable at a time and apply the chain rule to get its gradient
-           self.grad = 1
-           for v in reversed(topo):
-               v._backward()
-        */
+        fn build_topo<'a>(v: &'a Value, topo: &RefCell<Vec<&'a Value>>, visited: &RefCell<HashSet<&'a Value>>) {
+            if !visited.borrow().contains(&v) {
+                visited.borrow_mut().insert(v);
+                v.children.iter().for_each(|v| build_topo(v, topo, visited));
+                topo.borrow_mut().push(v)
+            }
+        }
+        build_topo(&self, &topo, &visited);
 
-        unimplemented!()
+        // go one variable at a time and apply the chain rule to get its gradient
+        *self.grad.borrow_mut() = 1.;
+        topo.borrow().iter().rev().for_each(|v| v.backward());
     }
 }
 
@@ -212,3 +211,18 @@ reverse_operator_impl! { impl Div for Value { fn div by (mul, pow) } }
 
 vararg_operator_impl! { use powf for Value { fn pow with rhs: f64 } }
 vararg_operator_impl! { use relu for Value { fn relu } }
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let address = &self.grad as *const Gradient;
+        address.hash(state)
+    }
+}
+
+impl PartialEq<Self> for Value {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(&self.grad, &other.grad)
+    }
+}
+
+impl Eq for Value {}
