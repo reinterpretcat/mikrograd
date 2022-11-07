@@ -7,7 +7,6 @@ use crate::Value;
 use rand::Rng;
 use std::fmt::{Display, Formatter, Write};
 use std::iter::once;
-use std::ops::Deref;
 
 pub trait Module: Display {
     fn zero_grad(&mut self);

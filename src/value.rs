@@ -61,7 +61,7 @@ impl Value {
 
         // go one variable at a time and apply the chain rule to get its gradient
         *self.grad.borrow_mut() = 1.;
-        topo.borrow().iter().rev().for_each(|v| v.backward());
+        topo.borrow().iter().rev().filter_map(|v| v.backward_fn.as_ref()).for_each(|backward| backward());
     }
 }
 

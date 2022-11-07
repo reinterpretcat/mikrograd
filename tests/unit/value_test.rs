@@ -4,6 +4,15 @@ fn create_dummy_grad() -> GradientFactory {
     Rc::new(Box::new(|| Rc::new(RefCell::new(0.))))
 }
 
+fn create_trackable_grad() -> GradientFactory {
+    let grads = RefCell::new(Vec::new());
+    Rc::new(Box::new(move || {
+        let grad = Rc::new(RefCell::new(0.));
+        grads.borrow_mut().push(grad.clone());
+        grad
+    }))
+}
+
 fn create_value(data: f64) -> Value {
     Value::new(data, create_dummy_grad())
 }
@@ -90,4 +99,9 @@ fn can_relu_value() {
     assert_eq!(result.data, 0.);
     assert_eq!(result.op, "relu");
     assert_eq!(result.children.len(), 1);
+}
+
+#[test]
+fn can_calculate_gradient() {
+    todo!()
 }
