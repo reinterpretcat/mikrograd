@@ -31,6 +31,10 @@ fn can_sum_values() {
     let result = create_value(3.) + 2.;
     assert_eq!(result.data, 5.);
     assert_eq!(result.op, "add");
+
+    let result = 3. + create_value(2.) + 2.;
+    assert_eq!(result.data, 7.);
+    assert_eq!(result.op, "add");
 }
 
 #[test]
@@ -44,6 +48,10 @@ fn can_subtract_values() {
     assert_eq!(result.children.len(), 2);
 
     let result = create_value(3.) - 2.;
+    assert_eq!(result.data, 1.);
+    assert_eq!(result.op, "sub");
+
+    let result = 3. - create_value(2.);
     assert_eq!(result.data, 1.);
     assert_eq!(result.op, "sub");
 }
@@ -62,6 +70,10 @@ fn can_multiply_values() {
     let result = create_value(3.4) * 2.;
     assert_eq!(result.data, 6.8);
     assert_eq!(result.op, "mul");
+
+    let result = 2. * create_value(3.4);
+    assert_eq!(result.data, 6.8);
+    assert_eq!(result.op, "mul");
 }
 
 #[test]
@@ -76,6 +88,10 @@ fn can_divide_values() {
     assert_eq!(result.children.len(), 2);
 
     let result = create_value(5.) / 2.;
+    assert_eq!(result.data, 2.5);
+    assert_eq!(result.op, "div");
+
+    let result = 5. / create_value(2.);
     assert_eq!(result.data, 2.5);
     assert_eq!(result.op, "div");
 }

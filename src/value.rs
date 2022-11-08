@@ -144,6 +144,15 @@ macro_rules! binary_operator_impl {
                 self.$method($type_::new(rhs, gradient_fn))
             }
         }
+
+        impl $trait_<$type_> for f64 {
+            type Output = $type_;
+
+            fn $method(self, rhs: $type_) -> $type_ {
+                let gradient_fn = rhs.gradient_fn.clone();
+                $type_::new(self, gradient_fn).$method(rhs)
+            }
+        }
     };
 }
 
@@ -197,6 +206,15 @@ macro_rules! reverse_operator_impl {
             fn $method(self, rhs: f64) -> $type_ {
                 let gradient_fn = self.gradient_fn.clone();
                 self.$method(Value::new(rhs, gradient_fn))
+            }
+        }
+
+        impl $trait_<$type_> for f64 {
+            type Output = $type_;
+
+            fn $method(self, rhs: $type_) -> $type_ {
+                let gradient_fn = rhs.gradient_fn.clone();
+                $type_::new(self, gradient_fn).$method(rhs)
             }
         }
     };
