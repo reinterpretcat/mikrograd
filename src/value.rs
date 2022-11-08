@@ -68,26 +68,36 @@ impl Value {
 mod gradients {
     use super::*;
 
-    pub fn add(mut lhs: GradientDataMut, mut rhs: GradientDataMut, out: (f64, f64)) {
+    pub fn add(mut lhs: (&Gradient, f64), mut rhs: (&Gradient, f64), out: (f64, f64)) {
+        let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
+        let (mut rhs_grad, _) = (rhs.0.borrow_mut(), rhs.1);
         let (out_grad, _) = out;
-        *lhs.0 += out_grad;
-        *rhs.0 += out_grad;
+
+        *lhs_grad += out_grad;
+        *rhs_grad += out_grad;
     }
 
-    pub fn mul(mut lhs: GradientDataMut, mut rhs: GradientDataMut, out: (f64, f64)) {
+    pub fn mul(mut lhs: (&Gradient, f64), mut rhs: (&Gradient, f64), out: (f64, f64)) {
+        let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
+        let (mut rhs_grad, rhs_data) = (rhs.0.borrow_mut(), rhs.1);
         let (out_grad, _) = out;
-        *lhs.0 += rhs.1 * out_grad;
-        *rhs.0 -= lhs.1 * out_grad;
+
+        *lhs_grad += rhs_data * out_grad;
+        *rhs_grad -= lhs_data * out_grad;
     }
 
-    pub fn powf(mut lhs: GradientDataMut, rhs: f64, out: (f64, f64)) {
-        let (out_grad, _) = out;
-        *lhs.0 += (rhs * lhs.1.powf(rhs - 1.)) * out_grad;
+    pub fn powf(mut lhs: (&Gradient, f64), rhs: f64, out: (&Gradient, f64)) {
+        let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
+        let (out_grad, _) = (*out.0.borrow(), out.1);
+
+        *lhs_grad += (rhs * lhs_data.powf(rhs - 1.)) * out_grad;
     }
 
-    pub fn relu(mut lhs: GradientDataMut, out: (f64, f64)) {
-        let (out_grad, out_data) = out;
-        *lhs.0 = if out_data > 0. { out_grad } else { 0. };
+    pub fn relu(mut lhs: (&Gradient, f64), out: (&Gradient, f64)) {
+        let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
+        let (out_grad, out_data) = (*out.0.borrow(), out.1);
+
+        *lhs_grad = if out_data > 0. { out_grad } else { 0. };
     }
 }
 
@@ -120,11 +130,7 @@ macro_rules! binary_operator_impl {
                 let backward_fn: Option<BackwardFn> = Some(Rc::new(Box::new(move || {
                     lhs_grad.upgrade().zip(rhs_grad.upgrade()).zip(out_grad.upgrade()).iter().for_each(
                         |((lhs_grad, rhs_grad), out_grad)| {
-                            gradients::$method(
-                                (lhs_grad.borrow_mut(), lhs_data),
-                                (rhs_grad.borrow_mut(), rhs_data),
-                                (*out_grad.borrow(), data),
-                            );
+                            gradients::$method((lhs_grad, lhs_data), (rhs_grad, rhs_data), (*out_grad.borrow(), data));
                         },
                     );
                 })));
@@ -171,9 +177,9 @@ macro_rules! vararg_operator_impl {
                     lhs_grad.upgrade().zip(out_grad.upgrade()).iter()
                         .for_each(|(lhs_grad, out_grad)| {
                             gradients::$fn_name(
-                                (lhs_grad.borrow_mut(), lhs_data),
+                                (lhs_grad, lhs_data),
                                 $($v,)?
-                                (*out_grad.borrow(), data)
+                                (out_grad, data)
                             );
                         });
                 })));
