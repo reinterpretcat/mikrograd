@@ -2,7 +2,7 @@
 #[path = "../tests/unit/value_test.rs"]
 mod value_test;
 
-use std::cell::{RefCell, RefMut};
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, Deref, Div, Mul, Sub};
@@ -10,8 +10,6 @@ use std::rc::Rc;
 
 pub(crate) type Gradient = Rc<RefCell<f64>>;
 pub(crate) type GradientFactory = Rc<Box<dyn Fn() -> Gradient>>;
-
-type GradientDataMut<'a> = (RefMut<'a, f64>, f64);
 type BackwardFn = Rc<Box<dyn Fn()>>;
 
 #[derive(Clone)]
@@ -68,32 +66,44 @@ impl Value {
 mod gradients {
     use super::*;
 
-    pub fn add(mut lhs: (&Gradient, f64), mut rhs: (&Gradient, f64), out: (f64, f64)) {
-        let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
-        let (mut rhs_grad, _) = (rhs.0.borrow_mut(), rhs.1);
+    pub fn add(lhs: (&Gradient, f64), rhs: (&Gradient, f64), out: (f64, f64)) {
         let (out_grad, _) = out;
 
-        *lhs_grad += out_grad;
-        *rhs_grad += out_grad;
+        if Rc::ptr_eq(lhs.0, rhs.0) {
+            let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
+            *lhs_grad += 2. * out_grad;
+        } else {
+            let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
+            let (mut rhs_grad, _) = (rhs.0.borrow_mut(), rhs.1);
+
+            *lhs_grad += out_grad;
+            *rhs_grad += out_grad;
+        }
     }
 
-    pub fn mul(mut lhs: (&Gradient, f64), mut rhs: (&Gradient, f64), out: (f64, f64)) {
-        let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
-        let (mut rhs_grad, rhs_data) = (rhs.0.borrow_mut(), rhs.1);
+    pub fn mul(lhs: (&Gradient, f64), rhs: (&Gradient, f64), out: (f64, f64)) {
         let (out_grad, _) = out;
 
-        *lhs_grad += rhs_data * out_grad;
-        *rhs_grad -= lhs_data * out_grad;
+        if Rc::ptr_eq(&lhs.0, &rhs.0) {
+            let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
+            *lhs_grad += 2. * (lhs_data * out_grad);
+        } else {
+            let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
+            let (mut rhs_grad, rhs_data) = (rhs.0.borrow_mut(), rhs.1);
+
+            *lhs_grad += rhs_data * out_grad;
+            *rhs_grad += lhs_data * out_grad;
+        }
     }
 
-    pub fn powf(mut lhs: (&Gradient, f64), rhs: f64, out: (&Gradient, f64)) {
+    pub fn powf(lhs: (&Gradient, f64), rhs: f64, out: (&Gradient, f64)) {
         let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
         let (out_grad, _) = (*out.0.borrow(), out.1);
 
         *lhs_grad += (rhs * lhs_data.powf(rhs - 1.)) * out_grad;
     }
 
-    pub fn relu(mut lhs: (&Gradient, f64), out: (&Gradient, f64)) {
+    pub fn relu(lhs: (&Gradient, f64), out: (&Gradient, f64)) {
         let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
         let (out_grad, out_data) = (*out.0.borrow(), out.1);
 
@@ -155,8 +165,7 @@ macro_rules! binary_operator_impl {
             type Output = $type_;
 
             fn $method(self, rhs: $type_) -> $type_ {
-                let gradient_fn = rhs.gradient_fn.clone();
-                $type_::new(self, gradient_fn).$method(rhs)
+                $type_::new(self, rhs.gradient_fn.clone()).$method(rhs)
             }
         }
     };
@@ -219,8 +228,7 @@ macro_rules! reverse_operator_impl {
             type Output = $type_;
 
             fn $method(self, rhs: $type_) -> $type_ {
-                let gradient_fn = rhs.gradient_fn.clone();
-                $type_::new(self, gradient_fn).$method(rhs)
+                $type_::new(self, rhs.gradient_fn.clone()).$method(rhs)
             }
         }
     };
@@ -245,7 +253,7 @@ impl Hash for Value {
 
 impl PartialEq<Self> for Value {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(&self.grad, &other.grad)
+        Rc::ptr_eq(&self.grad, &other.grad)
     }
 }
 

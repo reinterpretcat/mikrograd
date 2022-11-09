@@ -5,7 +5,7 @@ mod modules_test;
 use crate::value::GradientFactory;
 use crate::Value;
 use rand::Rng;
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::{Display, Formatter};
 use std::iter::once;
 
 pub trait Module: Display {
@@ -62,7 +62,7 @@ impl Display for Neuron {
     }
 }
 
-struct Layer {
+pub struct Layer {
     neurons: Vec<Neuron>,
 }
 
@@ -95,7 +95,7 @@ impl Display for Layer {
 }
 
 /// Multilayer Perceptron
-struct MLP {
+pub struct MLP {
     layers: Vec<Layer>,
 }
 
@@ -104,10 +104,8 @@ impl MLP {
         let sz = once(nin).chain(nouts.iter().cloned()).collect::<Vec<_>>();
 
         Self {
-            layers: nouts
-                .iter()
-                .enumerate()
-                .map(|(idx, nout)| {
+            layers: (0..nouts.len())
+                .map(|idx| {
                     let ntype = if idx != (nouts.len() - 1) { NeuronType::ReLU } else { NeuronType::Linear };
                     Layer::new(sz[idx], sz[idx + 1], ntype, gradient_fn.clone())
                 })
