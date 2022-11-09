@@ -141,21 +141,15 @@ fn can_calculate_gradient_with_double_borrowing() {
 }
 
 #[test]
-fn can_calculate_reference_gradient() {
-    /*    let x = Value::new(-4., create_trackable_grad());
+fn can_calculate_reference_gradients() {
+    let gradient_fn = create_trackable_grad();
+    let x = Value::new(-4., gradient_fn);
     let z = 2. * x.clone() + 2. + x.clone();
     let q = z.clone().relu() + z.clone() * x.clone();
     let h = (z.clone() * z.clone()).relu();
     let y = h + q.clone() + q * x.clone();
     y.backward();
 
-    assert_eq!(x.get_grad(), -2.);
-    assert_eq!(y.get_grad(), -20.);*/
-
-    let x = Value::new(-4., create_trackable_grad());
-    let z = 2. * x.clone() + 2. + x.clone();
-    let q = z.clone() + z.clone();
-    q.backward();
-
-    assert_eq!(x.get_grad(), 6.);
+    assert_eq!(x.get_grad(), 46.);
+    assert_eq!(y.get_grad(), 1.);
 }

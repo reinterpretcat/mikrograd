@@ -51,7 +51,7 @@ impl Value {
         fn build_topo<'a>(v: &'a Value, topo: &RefCell<Vec<&'a Value>>, visited: &RefCell<HashSet<&'a Value>>) {
             if !visited.borrow().contains(&v) {
                 visited.borrow_mut().insert(v);
-                v.children.iter().for_each(|v| build_topo(v, topo, visited));
+                v.children.iter().for_each(|child| build_topo(child, topo, visited));
                 topo.borrow_mut().push(v)
             }
         }
@@ -107,7 +107,7 @@ mod gradients {
         let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
         let (out_grad, out_data) = (*out.0.borrow(), out.1);
 
-        *lhs_grad = if out_data > 0. { out_grad } else { 0. };
+        *lhs_grad += if out_data > 0. { out_grad } else { 0. };
     }
 }
 
@@ -147,8 +147,9 @@ macro_rules! binary_operator_impl {
 
                 let op = String::from(stringify!($method));
                 let gradient_fn = self.gradient_fn.clone();
+                let children = if Rc::ptr_eq(&self.grad, &rhs.grad) { vec![self] } else { vec![self, rhs] };
 
-                Value { grad, children: vec![self, rhs], data, backward_fn, gradient_fn, op }
+                Value { grad, children, data, backward_fn, gradient_fn, op }
             }
         }
 
@@ -246,7 +247,7 @@ vararg_operator_impl! { use relu for Value { fn relu } }
 
 impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let address = &self.grad as *const Gradient;
+        let address = self.grad.as_ref() as *const RefCell<f64>;
         address.hash(state)
     }
 }
