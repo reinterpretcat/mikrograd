@@ -2,10 +2,11 @@
 #[path = "../tests/unit/value_test.rs"]
 mod value_test;
 
+use auto_ops::{impl_op, impl_op_commutative};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-use std::ops::{Add, Deref, Div, Mul, Sub};
+use std::ops::{Add, Deref, Mul};
 use std::rc::Rc;
 
 pub(crate) type Gradient = Rc<RefCell<f64>>;
@@ -55,7 +56,7 @@ impl Value {
                 topo.borrow_mut().push(v)
             }
         }
-        build_topo(&self, &topo, &visited);
+        build_topo(self, &topo, &visited);
 
         // go one variable at a time and apply the chain rule to get its gradient
         *self.grad.borrow_mut() = 1.;
@@ -70,11 +71,10 @@ mod gradients {
         let (out_grad, _) = out;
 
         if Rc::ptr_eq(lhs.0, rhs.0) {
-            let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
+            let mut lhs_grad = lhs.0.borrow_mut();
             *lhs_grad += 2. * out_grad;
         } else {
-            let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
-            let (mut rhs_grad, _) = (rhs.0.borrow_mut(), rhs.1);
+            let (mut lhs_grad, mut rhs_grad) = (lhs.0.borrow_mut(), rhs.0.borrow_mut());
 
             *lhs_grad += out_grad;
             *rhs_grad += out_grad;
@@ -84,7 +84,7 @@ mod gradients {
     pub fn mul(lhs: (&Gradient, f64), rhs: (&Gradient, f64), out: (f64, f64)) {
         let (out_grad, _) = out;
 
-        if Rc::ptr_eq(&lhs.0, &rhs.0) {
+        if Rc::ptr_eq(lhs.0, rhs.0) {
             let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
             *lhs_grad += 2. * (lhs_data * out_grad);
         } else {
@@ -121,68 +121,15 @@ mod scalars {
     }
 }
 
-macro_rules! binary_operator_impl {
-    (impl $trait_: ident for $type_: ident { fn $method: ident }) => {
-        impl $trait_<$type_> for $type_ {
-            type Output = $type_;
-
-            fn $method(self, rhs: $type_) -> $type_ {
-                let data = self.data.$method(&rhs.data);
-                let grad = self.gradient_fn.deref()();
-
-                let lhs_grad = Rc::downgrade(&self.grad);
-                let rhs_grad = Rc::downgrade(&rhs.grad);
-                let out_grad = Rc::downgrade(&grad);
-
-                let lhs_data = self.data;
-                let rhs_data = rhs.data;
-
-                let backward_fn: Option<BackwardFn> = Some(Rc::new(Box::new(move || {
-                    lhs_grad.upgrade().zip(rhs_grad.upgrade()).zip(out_grad.upgrade()).iter().for_each(
-                        |((lhs_grad, rhs_grad), out_grad)| {
-                            gradients::$method((lhs_grad, lhs_data), (rhs_grad, rhs_data), (*out_grad.borrow(), data));
-                        },
-                    );
-                })));
-
-                let op = String::from(stringify!($method));
-                let gradient_fn = self.gradient_fn.clone();
-                let children = if Rc::ptr_eq(&self.grad, &rhs.grad) { vec![self] } else { vec![self, rhs] };
-
-                Value { grad, children, data, backward_fn, gradient_fn, op }
-            }
-        }
-
-        impl $trait_<f64> for $type_ {
-            type Output = $type_;
-
-            fn $method(self, rhs: f64) -> $type_ {
-                let gradient_fn = self.gradient_fn.clone();
-                self.$method($type_::new(rhs, gradient_fn))
-            }
-        }
-
-        impl $trait_<$type_> for f64 {
-            type Output = $type_;
-
-            fn $method(self, rhs: $type_) -> $type_ {
-                $type_::new(self, rhs.gradient_fn.clone()).$method(rhs)
-            }
-        }
-    };
-}
-
-macro_rules! vararg_operator_impl {
+macro_rules! custom_operator_impl {
     (use $fn_name: ident for $type_: ident { fn $method: ident$( with $v:tt: $t:ty)? }) => {
         impl $type_ {
-            pub fn $method(self$(, $v: $t)?) -> $type_ {
+            pub fn $method(&self$(, $v: $t)?) -> $type_ {
                 let data = scalars::$fn_name(self.data $(,$v)?);
                 let grad = self.gradient_fn.deref()();
-
-                let lhs_grad = Rc::downgrade(&self.grad);
-                let out_grad = Rc::downgrade(&grad);
-
+                let (lhs_grad, out_grad) = (Rc::downgrade(&self.grad), Rc::downgrade(&grad));
                 let lhs_data = self.data;
+
                 let backward_fn: Option<BackwardFn> = Some(Rc::new(Box::new(move || {
                     lhs_grad.upgrade().zip(out_grad.upgrade()).iter()
                         .for_each(|(lhs_grad, out_grad)| {
@@ -197,58 +144,69 @@ macro_rules! vararg_operator_impl {
                 let op = String::from(stringify!($method));
                 let gradient_fn = self.gradient_fn.clone();
 
-                Value { grad, children: vec![self], data, backward_fn, gradient_fn, op }
+                Value { grad, children: vec![self.clone()], data, backward_fn, gradient_fn, op }
             }
         }
     };
 }
 
-macro_rules! reverse_operator_impl {
-    (impl $trait_: ident for $type_: ident { fn $method: ident by ($reverse_val: ident, $reverse_arg: ident) }) => {
-        impl $trait_<$type_> for $type_ {
-            type Output = $type_;
+macro_rules! binary_operator_impl {
+    (impl $op:tt for $type_: ident with fn $method: ident and reverse $op_rev:tt fn $method_rev: ident by ($reverse_val: ident, $reverse_arg: ident) ) => {
+        fn $method(lhs: &$type_, rhs: &$type_) -> $type_ {
+            let data = lhs.data.$method(&rhs.data);
+            let grad = lhs.gradient_fn.deref()();
 
-            fn $method(self, rhs: $type_) -> $type_ {
-                let mut value = self.$reverse_val(rhs.$reverse_arg(-1.));
-                value.op = String::from(stringify!($method));
+            let (lhs_data, rhs_data) = (lhs.data, rhs.data);
+            let (lhs_grad, rhs_grad, out_grad) =
+                (Rc::downgrade(&lhs.grad), Rc::downgrade(&rhs.grad), Rc::downgrade(&grad));
 
-                value
-            }
+            let backward_fn: Option<BackwardFn> = Some(Rc::new(Box::new(move || {
+                lhs_grad.upgrade().zip(rhs_grad.upgrade()).zip(out_grad.upgrade()).iter().for_each(
+                    |((lhs_grad, rhs_grad), out_grad)| {
+                        gradients::$method((lhs_grad, lhs_data), (rhs_grad, rhs_data), (*out_grad.borrow(), data));
+                    },
+                );
+            })));
+
+            let op = String::from(stringify!($method));
+            let gradient_fn = lhs.gradient_fn.clone();
+            let children =
+                if Rc::ptr_eq(&lhs.grad, &rhs.grad) { vec![lhs.clone()] } else { vec![lhs.clone(), rhs.clone()] };
+
+            Value { grad, children, data, backward_fn, gradient_fn, op }
         }
 
-        impl $trait_<f64> for $type_ {
-            type Output = $type_;
-
-            fn $method(self, rhs: f64) -> $type_ {
-                let gradient_fn = self.gradient_fn.clone();
-                self.$method(Value::new(rhs, gradient_fn))
-            }
+        fn $method_rev(lhs: &$type_, rhs: &$type_) -> $type_ {
+            let mut value = lhs.$reverse_val(rhs.clone().$reverse_arg(-1.));
+            value.op = String::from(stringify!($method_rev));
+            value
         }
 
-        impl $trait_<$type_> for f64 {
-            type Output = $type_;
+        impl_op! { $op |a: &Value, b: &Value| -> Value { $method(a, b) } }
+        impl_op_commutative! { $op |a: Value, b: &Value| -> Value { $method(&a, b) } }
+        impl_op! { $op |a: Value, b: Value| -> Value { $method(&a, &b) } }
+        impl_op_commutative! { $op |a: &Value, b: f64| -> Value { $method(a, &Value::new(b, a.gradient_fn.clone()))  } }
+        impl_op_commutative! { $op |a: Value, b: f64| -> Value { &a $op b } }
 
-            fn $method(self, rhs: $type_) -> $type_ {
-                $type_::new(self, rhs.gradient_fn.clone()).$method(rhs)
-            }
-        }
+        impl_op! { $op_rev |a: &Value, b: &Value| -> Value { $method_rev(a, b) } }
+        impl_op! { $op_rev |a: Value, b: &Value| -> Value { $method_rev(&a, b) } }
+        impl_op! { $op_rev |a: Value, b: Value| -> Value { $method_rev(&a, &b) } }
+        impl_op! { $op_rev |a: &Value, b: f64| -> Value { $method_rev(a, &Value::new(b, a.gradient_fn.clone()))  } }
+        impl_op! { $op_rev |a: Value, b: f64| -> Value { &a $op_rev b } }
+        impl_op! { $op_rev |a: f64, b: &Value| -> Value { $method_rev(&Value::new(a, b.gradient_fn.clone()), b)  } }
+        impl_op! { $op_rev |a: f64, b: Value| -> Value { a $op_rev &b } }
     };
 }
 
-// implement binary operations with values
-binary_operator_impl! { impl Add for Value { fn add } }
-binary_operator_impl! { impl Mul for Value { fn mul } }
-
-reverse_operator_impl! { impl Sub for Value { fn sub by (add, mul) } }
-reverse_operator_impl! { impl Div for Value { fn div by (mul, pow) } }
-
-vararg_operator_impl! { use powf for Value { fn pow with rhs: f64 } }
-vararg_operator_impl! { use relu for Value { fn relu } }
+// NOTE assumption: main operator is commutative, reverse - is not
+binary_operator_impl! { impl + for Value with fn add and reverse - fn sub by (add, mul) }
+binary_operator_impl! { impl * for Value with fn mul and reverse / fn div by (mul, pow) }
+custom_operator_impl! { use powf for Value { fn pow with rhs: f64 } }
+custom_operator_impl! { use relu for Value { fn relu } }
 
 impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let address = self.grad.as_ref() as *const RefCell<f64>;
-        address.hash(state)
+        (self.grad.as_ref() as *const RefCell<f64>).hash(state)
     }
 }
 

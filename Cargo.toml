@@ -10,3 +10,4 @@ categories = ["algorithms", "science"]
 
 [dependencies]
 rand = "0.8.3"
+auto_ops = "0.3.0"

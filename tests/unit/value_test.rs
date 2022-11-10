@@ -22,11 +22,13 @@ fn can_sum_values() {
     let lhs = create_value(3.);
     let rhs = create_value(2.);
 
-    let result = lhs + rhs;
+    let result1 = &lhs + &rhs;
+    let result2 = lhs + rhs;
 
-    assert_eq!(result.data, 5.);
-    assert_eq!(result.op, "add");
-    assert_eq!(result.children.len(), 2);
+    assert_eq!(result1.data, 5.);
+    assert_eq!(result1.op, "add");
+    assert_eq!(result1.children.len(), 2);
+    assert_eq!(result2.data, 5.);
 
     let result = create_value(3.) + 2.;
     assert_eq!(result.data, 5.);
@@ -35,25 +37,6 @@ fn can_sum_values() {
     let result = 3. + create_value(2.) + 2.;
     assert_eq!(result.data, 7.);
     assert_eq!(result.op, "add");
-}
-
-#[test]
-fn can_subtract_values() {
-    let lhs = create_value(3.);
-    let rhs = create_value(2.);
-
-    let result = lhs - rhs;
-    assert_eq!(result.data, 1.);
-    assert_eq!(result.op, "sub");
-    assert_eq!(result.children.len(), 2);
-
-    let result = create_value(3.) - 2.;
-    assert_eq!(result.data, 1.);
-    assert_eq!(result.op, "sub");
-
-    let result = 3. - create_value(2.);
-    assert_eq!(result.data, 1.);
-    assert_eq!(result.op, "sub");
 }
 
 #[test]
@@ -74,6 +57,25 @@ fn can_multiply_values() {
     let result = 2. * create_value(3.4);
     assert_eq!(result.data, 6.8);
     assert_eq!(result.op, "mul");
+}
+
+#[test]
+fn can_subtract_values() {
+    let lhs = create_value(3.);
+    let rhs = create_value(2.);
+
+    let result = lhs - rhs;
+    assert_eq!(result.data, 1.);
+    assert_eq!(result.op, "sub");
+    assert_eq!(result.children.len(), 2);
+
+    let result = create_value(3.) - 2.;
+    assert_eq!(result.data, 1.);
+    assert_eq!(result.op, "sub");
+
+    let result = 3. - create_value(2.);
+    assert_eq!(result.data, 1.);
+    assert_eq!(result.op, "sub");
 }
 
 #[test]
@@ -144,10 +146,10 @@ fn can_calculate_gradient_with_double_borrowing() {
 fn can_calculate_reference_gradients() {
     let gradient_fn = create_trackable_grad();
     let x = Value::new(-4., gradient_fn);
-    let z = 2. * x.clone() + 2. + x.clone();
-    let q = z.clone().relu() + z.clone() * x.clone();
-    let h = (z.clone() * z.clone()).relu();
-    let y = h + q.clone() + q * x.clone();
+    let z = 2. * &x + 2. + &x;
+    let q = z.relu() + &z * &x;
+    let h = (&z * &z).relu();
+    let y = h + &q + q * &x;
     y.backward();
 
     assert_eq!(x.get_grad(), 46.);
