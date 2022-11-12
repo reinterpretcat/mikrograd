@@ -59,16 +59,9 @@ fn loss(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model: &MLP) -> (V
     return (total_loss, accuracy);
 }
 
-fn main() {
-    let mut model = mikrograd::new_mlp(2, &[16, 16, 1]);
-
-    println!("{}", model);
-    println!("number of parameters: {}", model.parameters().count());
-
-    let (x_data, y_labels) = make_moons(11);
-
+fn run_optimization(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model: &mut MLP, steps: usize) {
     // optimization
-    for k in 0..10 {
+    for k in 0..steps {
         // forward
         let (total_loss, accuracy) = loss(&x_data, &y_labels, &model);
 
@@ -85,4 +78,17 @@ fn main() {
 
         println!("step {} loss {}, accuracy {:.2}%", k, total_loss.get_data(), accuracy * 100.);
     }
+}
+
+fn main() {
+    let mut model = mikrograd::new_mlp(2, &[16, 16, 1]);
+
+    println!("{}", model);
+    println!("number of parameters: {}", model.parameters().count());
+
+    // generate test data
+    let (x_data, y_labels) = make_moons(100);
+
+    // run gradient descent optimization
+    run_optimization(&x_data, &y_labels, &mut model, 100);
 }
