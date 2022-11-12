@@ -2,15 +2,17 @@
 #[path = "../tests/unit/value_test.rs"]
 mod value_test;
 
-use crate::create_gradient_fn;
 use auto_ops::{impl_op, impl_op_commutative};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::iter::Sum;
-use std::ops::{Add, Deref, Mul};
+use std::ops::{Add, Mul};
 use std::rc::Rc;
+
+pub(crate) type SharedGradientData = Rc<RefCell<GradientData>>;
+type BackwardFn = Rc<Box<dyn Fn()>>;
 
 pub(crate) struct GradientData {
     grad: f64,
@@ -18,27 +20,23 @@ pub(crate) struct GradientData {
 }
 
 impl GradientData {
-    pub fn new(data: f64) -> Self {
-        Self { grad: 0., data }
+    pub fn new_shared(data: f64) -> SharedGradientData {
+        Rc::new(RefCell::new(Self { grad: 0., data }))
     }
 }
-
-pub(crate) type SharedGradientData = Rc<RefCell<GradientData>>;
-pub(crate) type GradientDataFactory = Rc<Box<dyn Fn(f64) -> SharedGradientData>>;
-type BackwardFn = Rc<Box<dyn Fn()>>;
 
 #[derive(Clone)]
 pub struct Value {
     grad_data: SharedGradientData,
     children: Vec<Value>,
     backward_fn: Option<BackwardFn>,
-    gradient_fn: GradientDataFactory,
     op: String,
 }
 
 impl Value {
-    pub(crate) fn new(data: f64, gradient_fn: GradientDataFactory) -> Self {
-        Self { grad_data: gradient_fn(data), children: vec![], backward_fn: None, gradient_fn, op: "".to_string() }
+    pub(crate) fn new(data: f64) -> Self {
+        let grad_data = GradientData::new_shared(data);
+        Self { grad_data, children: vec![], backward_fn: None, op: "".to_string() }
     }
 
     /// Returns underlying data.
@@ -133,8 +131,7 @@ macro_rules! custom_operator_impl {
     (use $fn_name: ident for $type_: ident { fn $method: ident$( with $v:tt: $t:ty)? }) => {
         impl $type_ {
             pub fn $method(&self$(, $v: $t)?) -> $type_ {
-                let grad_data = self.gradient_fn.deref()(scalars::$fn_name(self.get_data() $(,$v)?));
-
+                let grad_data = GradientData::new_shared(scalars::$fn_name(self.get_data() $(,$v)?));
                 let (lhs_gd, out_gd) = (Rc::downgrade(&self.grad_data), Rc::downgrade(&grad_data));
 
                 let backward_fn: Option<BackwardFn> = Some(Rc::new(Box::new(move || {
@@ -145,9 +142,7 @@ macro_rules! custom_operator_impl {
                 })));
 
                 let op = String::from(stringify!($method));
-                let gradient_fn = self.gradient_fn.clone();
-
-                Value { grad_data, children: vec![self.clone()], backward_fn, gradient_fn, op }
+                Value { grad_data, children: vec![self.clone()], backward_fn, op }
             }
         }
     };
@@ -156,7 +151,7 @@ macro_rules! custom_operator_impl {
 macro_rules! binary_operator_impl {
     (impl $op:tt for $type_: ident with fn $method: ident and reverse $op_rev:tt fn $method_rev: ident by ($reverse_val: ident, $reverse_arg: ident) ) => {
         fn $method(lhs: &$type_, rhs: &$type_) -> $type_ {
-            let grad_data = lhs.gradient_fn.deref()(lhs.get_data().$method(&rhs.get_data()));
+            let grad_data = GradientData::new_shared(lhs.get_data().$method(&rhs.get_data()));
             let (lhs_gd, rhs_gd, out_gd) =
                 (Rc::downgrade(&lhs.grad_data), Rc::downgrade(&rhs.grad_data), Rc::downgrade(&grad_data));
 
@@ -169,14 +164,13 @@ macro_rules! binary_operator_impl {
             })));
 
             let op = String::from(stringify!($method));
-            let gradient_fn = lhs.gradient_fn.clone();
             let children = if Rc::ptr_eq(&lhs.grad_data, &rhs.grad_data) {
                 vec![lhs.clone()]
             } else {
                 vec![lhs.clone(), rhs.clone()]
             };
 
-            Value { grad_data, children, backward_fn, gradient_fn, op }
+            Value { grad_data, children, backward_fn, op }
         }
 
         fn $method_rev(lhs: &$type_, rhs: &$type_) -> $type_ {
@@ -188,15 +182,15 @@ macro_rules! binary_operator_impl {
         impl_op! { $op |a: &Value, b: &Value| -> Value { $method(a, b) } }
         impl_op_commutative! { $op |a: Value, b: &Value| -> Value { $method(&a, b) } }
         impl_op! { $op |a: Value, b: Value| -> Value { $method(&a, &b) } }
-        impl_op_commutative! { $op |a: &Value, b: f64| -> Value { $method(a, &Value::new(b, a.gradient_fn.clone()))  } }
+        impl_op_commutative! { $op |a: &Value, b: f64| -> Value { $method(a, &Value::new(b))  } }
         impl_op_commutative! { $op |a: Value, b: f64| -> Value { &a $op b } }
 
         impl_op! { $op_rev |a: &Value, b: &Value| -> Value { $method_rev(a, b) } }
         impl_op! { $op_rev |a: Value, b: &Value| -> Value { $method_rev(&a, b) } }
         impl_op! { $op_rev |a: Value, b: Value| -> Value { $method_rev(&a, &b) } }
-        impl_op! { $op_rev |a: &Value, b: f64| -> Value { $method_rev(a, &Value::new(b, a.gradient_fn.clone()))  } }
+        impl_op! { $op_rev |a: &Value, b: f64| -> Value { $method_rev(a, &Value::new(b))  } }
         impl_op! { $op_rev |a: Value, b: f64| -> Value { &a $op_rev b } }
-        impl_op! { $op_rev |a: f64, b: &Value| -> Value { $method_rev(&Value::new(a, b.gradient_fn.clone()), b)  } }
+        impl_op! { $op_rev |a: f64, b: &Value| -> Value { $method_rev(&Value::new(a), b)  } }
         impl_op! { $op_rev |a: f64, b: Value| -> Value { a $op_rev &b } }
     };
 }
@@ -235,6 +229,6 @@ impl Debug for Value {
 
 impl Sum for Value {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Value::new(0., create_gradient_fn()), |acc, v| acc + v)
+        iter.fold(Value::new(0.), |acc, v| acc + v)
     }
 }

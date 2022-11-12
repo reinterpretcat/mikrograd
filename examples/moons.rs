@@ -20,6 +20,7 @@ fn make_moons(n_samples: usize) -> (Array<f64, Ix2>, Array<f64, Ix1>) {
     )
     .unwrap();
 
+    // make label be -1 or 1
     let labels = 2.
         * ndarray::concatenate(
             Axis(0),

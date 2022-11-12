@@ -1,20 +1,7 @@
 use super::*;
 
-fn create_dummy_grad() -> GradientDataFactory {
-    Rc::new(Box::new(|data| Rc::new(RefCell::new(GradientData::new(data)))))
-}
-
-fn create_trackable_grad() -> GradientDataFactory {
-    let grads = RefCell::new(Vec::new());
-    Rc::new(Box::new(move |data| {
-        let grad = Rc::new(RefCell::new(GradientData::new(data)));
-        grads.borrow_mut().push(grad.clone());
-        grad
-    }))
-}
-
 fn create_value(data: f64) -> Value {
-    Value::new(data, create_dummy_grad())
+    Value::new(data)
 }
 
 #[test]
@@ -121,7 +108,7 @@ fn can_relu_value() {
 
 #[test]
 fn can_calculate_simple_gradient() {
-    let x = Value::new(-4., create_trackable_grad());
+    let x = Value::new(-4.);
     let z = 2.5 * x.clone();
     z.backward();
     assert_eq!(x.get_grad(), 2.5);
@@ -129,14 +116,12 @@ fn can_calculate_simple_gradient() {
 
 #[test]
 fn can_calculate_gradient_with_double_borrowing() {
-    let gradient_fn = create_trackable_grad();
-
-    let x = Value::new(-4., gradient_fn.clone());
+    let x = Value::new(-4.);
     let z = x.clone() * x.clone();
     z.backward();
     assert_eq!(x.get_grad(), -8.);
 
-    let x = Value::new(-4., gradient_fn);
+    let x = Value::new(-4.);
     let z = x.clone() + x.clone();
     z.backward();
     assert_eq!(x.get_grad(), 2.)
@@ -144,8 +129,7 @@ fn can_calculate_gradient_with_double_borrowing() {
 
 #[test]
 fn can_calculate_reference_gradients() {
-    let gradient_fn = create_trackable_grad();
-    let x = Value::new(-4., gradient_fn);
+    let x = Value::new(-4.);
     let z = 2. * &x + 2. + &x;
     let q = z.relu() + &z * &x;
     let h = (&z * &z).relu();

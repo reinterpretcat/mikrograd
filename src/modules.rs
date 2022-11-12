@@ -2,7 +2,6 @@
 #[path = "../tests/unit/modules_test.rs"]
 mod modules_test;
 
-use crate::value::GradientDataFactory;
 use crate::Value;
 use rand::Rng;
 use std::fmt::{Display, Formatter};
@@ -28,11 +27,11 @@ pub struct Neuron {
 }
 
 impl Neuron {
-    pub(crate) fn new(nin: usize, ntype: NeuronType, gradient_fn: GradientDataFactory) -> Self {
+    pub(crate) fn new(nin: usize, ntype: NeuronType) -> Self {
         let mut rng = rand::thread_rng();
         Self {
-            w: (0..nin).map(|_| rng.gen_range(-1.0..1.0)).map(|data| Value::new(data, gradient_fn.clone())).collect(),
-            b: Value::new(0., gradient_fn),
+            w: (0..nin).map(|_| rng.gen_range(-1.0..1.0)).map(|data| Value::new(data)).collect(),
+            b: Value::new(0.),
             ntype,
         }
     }
@@ -74,8 +73,8 @@ pub struct Layer {
 }
 
 impl Layer {
-    pub(crate) fn new(nin: usize, nout: usize, ntype: NeuronType, gradient_fn: GradientDataFactory) -> Self {
-        Self { neurons: (0..nout).map(|_| Neuron::new(nin, ntype.clone(), gradient_fn.clone())).collect() }
+    pub(crate) fn new(nin: usize, nout: usize, ntype: NeuronType) -> Self {
+        Self { neurons: (0..nout).map(|_| Neuron::new(nin, ntype.clone())).collect() }
     }
 
     pub fn call(&self, x: &[Value]) -> Vec<Value> {
@@ -112,14 +111,14 @@ pub struct MLP {
 }
 
 impl MLP {
-    pub(crate) fn new(nin: usize, nouts: &[usize], gradient_fn: GradientDataFactory) -> Self {
+    pub(crate) fn new(nin: usize, nouts: &[usize]) -> Self {
         let sz = once(nin).chain(nouts.iter().cloned()).collect::<Vec<_>>();
 
         Self {
             layers: (0..nouts.len())
                 .map(|idx| {
                     let ntype = if idx != (nouts.len() - 1) { NeuronType::ReLU } else { NeuronType::Linear };
-                    Layer::new(sz[idx], sz[idx + 1], ntype, gradient_fn.clone())
+                    Layer::new(sz[idx], sz[idx + 1], ntype)
                 })
                 .collect(),
         }
