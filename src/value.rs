@@ -2,10 +2,13 @@
 #[path = "../tests/unit/value_test.rs"]
 mod value_test;
 
+use crate::create_gradient_fn;
 use auto_ops::{impl_op, impl_op_commutative};
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use std::iter::Sum;
 use std::ops::{Add, Deref, Mul};
 use std::rc::Rc;
 
@@ -217,3 +220,21 @@ impl PartialEq<Self> for Value {
 }
 
 impl Eq for Value {}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Value[data={}, grad={}]", self.data, self.get_grad()))
+    }
+}
+
+impl Debug for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl Sum for Value {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Value::new(0., create_gradient_fn()), |acc, v| acc + v)
+    }
+}

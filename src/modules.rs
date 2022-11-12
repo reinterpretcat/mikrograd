@@ -13,12 +13,13 @@ pub trait Module: Display {
     fn parameters(&self) -> Box<dyn Iterator<Item = &Value> + '_>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum NeuronType {
     ReLU,
     Linear,
 }
 
+#[derive(Debug)]
 pub struct Neuron {
     w: Vec<Value>,
     b: Value,
@@ -35,8 +36,8 @@ impl Neuron {
         }
     }
 
-    pub fn call(&self, x: &[f64]) -> Value {
-        self.w.iter().cloned().zip(x).fold(self.b.clone(), |acc, (wi, &xi)| acc + wi + xi)
+    pub fn call(&self, x: &[Value]) -> Value {
+        self.w.iter().cloned().zip(x).fold(self.b.clone(), |acc, (wi, xi)| &acc + &wi + xi)
     }
 }
 
@@ -62,6 +63,7 @@ impl Display for Neuron {
     }
 }
 
+#[derive(Debug)]
 pub struct Layer {
     neurons: Vec<Neuron>,
 }
@@ -71,7 +73,7 @@ impl Layer {
         Self { neurons: (0..nout).map(|_| Neuron::new(nin, ntype.clone(), gradient_fn.clone())).collect() }
     }
 
-    pub fn call(&self, x: &[f64]) -> Vec<Value> {
+    pub fn call(&self, x: &[Value]) -> Vec<Value> {
         self.neurons.iter().map(|neuron| neuron.call(x)).collect()
     }
 }
@@ -95,6 +97,7 @@ impl Display for Layer {
 }
 
 /// Multilayer Perceptron
+#[derive(Debug)]
 pub struct MLP {
     layers: Vec<Layer>,
 }
@@ -113,7 +116,7 @@ impl MLP {
         }
     }
 
-    pub fn call(&self, x: &[f64]) -> Vec<Value> {
+    pub fn call(&self, x: &[Value]) -> Vec<Value> {
         let mut iterator = self.layers.iter();
         iterator.next().map(|first| iterator.fold(first.call(x), |_, layer| layer.call(x))).unwrap_or_default()
     }
