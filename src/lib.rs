@@ -1,7 +1,7 @@
 mod modules;
 
 pub use self::modules::*;
-use crate::value::GradientFactory;
+use crate::value::{GradientData, GradientDataFactory};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -16,6 +16,6 @@ pub fn new_value(data: f64) -> Value {
     Value::new(data, create_gradient_fn())
 }
 
-fn create_gradient_fn() -> GradientFactory {
-    Rc::new(Box::new(|| Rc::new(RefCell::new(0.))))
+fn create_gradient_fn() -> GradientDataFactory {
+    Rc::new(Box::new(|data| Rc::new(RefCell::new(GradientData::new(data)))))
 }

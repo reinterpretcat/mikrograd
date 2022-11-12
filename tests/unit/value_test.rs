@@ -1,13 +1,13 @@
 use super::*;
 
-fn create_dummy_grad() -> GradientFactory {
-    Rc::new(Box::new(|| Rc::new(RefCell::new(0.))))
+fn create_dummy_grad() -> GradientDataFactory {
+    Rc::new(Box::new(|data| Rc::new(RefCell::new(GradientData::new(data)))))
 }
 
-fn create_trackable_grad() -> GradientFactory {
+fn create_trackable_grad() -> GradientDataFactory {
     let grads = RefCell::new(Vec::new());
-    Rc::new(Box::new(move || {
-        let grad = Rc::new(RefCell::new(0.));
+    Rc::new(Box::new(move |data| {
+        let grad = Rc::new(RefCell::new(GradientData::new(data)));
         grads.borrow_mut().push(grad.clone());
         grad
     }))
@@ -25,17 +25,17 @@ fn can_sum_values() {
     let result1 = &lhs + &rhs;
     let result2 = lhs + rhs;
 
-    assert_eq!(result1.data, 5.);
+    assert_eq!(result1.get_data(), 5.);
     assert_eq!(result1.op, "add");
     assert_eq!(result1.children.len(), 2);
-    assert_eq!(result2.data, 5.);
+    assert_eq!(result2.get_data(), 5.);
 
     let result = create_value(3.) + 2.;
-    assert_eq!(result.data, 5.);
+    assert_eq!(result.get_data(), 5.);
     assert_eq!(result.op, "add");
 
     let result = 3. + create_value(2.) + 2.;
-    assert_eq!(result.data, 7.);
+    assert_eq!(result.get_data(), 7.);
     assert_eq!(result.op, "add");
 }
 
@@ -46,16 +46,16 @@ fn can_multiply_values() {
 
     let result = lhs * rhs;
 
-    assert_eq!(result.data, 6.);
+    assert_eq!(result.get_data(), 6.);
     assert_eq!(result.op, "mul");
     assert_eq!(result.children.len(), 2);
 
     let result = create_value(3.4) * 2.;
-    assert_eq!(result.data, 6.8);
+    assert_eq!(result.get_data(), 6.8);
     assert_eq!(result.op, "mul");
 
     let result = 2. * create_value(3.4);
-    assert_eq!(result.data, 6.8);
+    assert_eq!(result.get_data(), 6.8);
     assert_eq!(result.op, "mul");
 }
 
@@ -65,16 +65,16 @@ fn can_subtract_values() {
     let rhs = create_value(2.);
 
     let result = lhs - rhs;
-    assert_eq!(result.data, 1.);
+    assert_eq!(result.get_data(), 1.);
     assert_eq!(result.op, "sub");
     assert_eq!(result.children.len(), 2);
 
     let result = create_value(3.) - 2.;
-    assert_eq!(result.data, 1.);
+    assert_eq!(result.get_data(), 1.);
     assert_eq!(result.op, "sub");
 
     let result = 3. - create_value(2.);
-    assert_eq!(result.data, 1.);
+    assert_eq!(result.get_data(), 1.);
     assert_eq!(result.op, "sub");
 }
 
@@ -85,23 +85,23 @@ fn can_divide_values() {
 
     let result = lhs / rhs;
 
-    assert_eq!(result.data, 1.5);
+    assert_eq!(result.get_data(), 1.5);
     assert_eq!(result.op, "div");
     assert_eq!(result.children.len(), 2);
 
     let result = create_value(5.) / 2.;
-    assert_eq!(result.data, 2.5);
+    assert_eq!(result.get_data(), 2.5);
     assert_eq!(result.op, "div");
 
     let result = 5. / create_value(2.);
-    assert_eq!(result.data, 2.5);
+    assert_eq!(result.get_data(), 2.5);
     assert_eq!(result.op, "div");
 }
 
 #[test]
 fn can_pow_value() {
     let result = create_value(5.).pow(2.);
-    assert_eq!(result.data, 25.);
+    assert_eq!(result.get_data(), 25.);
     assert_eq!(result.op, "pow");
     assert_eq!(result.children.len(), 1);
 }
@@ -109,12 +109,12 @@ fn can_pow_value() {
 #[test]
 fn can_relu_value() {
     let result = create_value(5.).relu();
-    assert_eq!(result.data, 5.);
+    assert_eq!(result.get_data(), 5.);
     assert_eq!(result.op, "relu");
     assert_eq!(result.children.len(), 1);
 
     let result = create_value(-1.).relu();
-    assert_eq!(result.data, 0.);
+    assert_eq!(result.get_data(), 0.);
     assert_eq!(result.op, "relu");
     assert_eq!(result.children.len(), 1);
 }

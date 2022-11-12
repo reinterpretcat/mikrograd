@@ -2,7 +2,7 @@
 #[path = "../tests/unit/modules_test.rs"]
 mod modules_test;
 
-use crate::value::GradientFactory;
+use crate::value::GradientDataFactory;
 use crate::Value;
 use rand::Rng;
 use std::fmt::{Display, Formatter};
@@ -28,7 +28,7 @@ pub struct Neuron {
 }
 
 impl Neuron {
-    pub(crate) fn new(nin: usize, ntype: NeuronType, gradient_fn: GradientFactory) -> Self {
+    pub(crate) fn new(nin: usize, ntype: NeuronType, gradient_fn: GradientDataFactory) -> Self {
         let mut rng = rand::thread_rng();
         Self {
             w: (0..nin).map(|_| rng.gen_range(-1.0..1.0)).map(|data| Value::new(data, gradient_fn.clone())).collect(),
@@ -74,7 +74,7 @@ pub struct Layer {
 }
 
 impl Layer {
-    pub(crate) fn new(nin: usize, nout: usize, ntype: NeuronType, gradient_fn: GradientFactory) -> Self {
+    pub(crate) fn new(nin: usize, nout: usize, ntype: NeuronType, gradient_fn: GradientDataFactory) -> Self {
         Self { neurons: (0..nout).map(|_| Neuron::new(nin, ntype.clone(), gradient_fn.clone())).collect() }
     }
 
@@ -112,7 +112,7 @@ pub struct MLP {
 }
 
 impl MLP {
-    pub(crate) fn new(nin: usize, nouts: &[usize], gradient_fn: GradientFactory) -> Self {
+    pub(crate) fn new(nin: usize, nouts: &[usize], gradient_fn: GradientDataFactory) -> Self {
         let sz = once(nin).chain(nouts.iter().cloned()).collect::<Vec<_>>();
 
         Self {

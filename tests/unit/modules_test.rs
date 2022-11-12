@@ -1,9 +1,10 @@
 use super::*;
+use crate::GradientData;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-fn create_dummy_grad() -> GradientFactory {
-    Rc::new(Box::new(|| Rc::new(RefCell::new(0.))))
+fn create_dummy_grad() -> GradientDataFactory {
+    Rc::new(Box::new(|data| Rc::new(RefCell::new(GradientData::new(data)))))
 }
 
 #[test]

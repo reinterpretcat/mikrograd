@@ -12,42 +12,52 @@ use std::iter::Sum;
 use std::ops::{Add, Deref, Mul};
 use std::rc::Rc;
 
-pub(crate) type Gradient = Rc<RefCell<f64>>;
-pub(crate) type GradientFactory = Rc<Box<dyn Fn() -> Gradient>>;
+pub(crate) struct GradientData {
+    grad: f64,
+    data: f64,
+}
+
+impl GradientData {
+    pub fn new(data: f64) -> Self {
+        Self { grad: 0., data }
+    }
+}
+
+pub(crate) type SharedGradientData = Rc<RefCell<GradientData>>;
+pub(crate) type GradientDataFactory = Rc<Box<dyn Fn(f64) -> SharedGradientData>>;
 type BackwardFn = Rc<Box<dyn Fn()>>;
 
 #[derive(Clone)]
 pub struct Value {
-    grad: Gradient,
+    grad_data: SharedGradientData,
     children: Vec<Value>,
-    data: f64,
     backward_fn: Option<BackwardFn>,
-    gradient_fn: GradientFactory,
+    gradient_fn: GradientDataFactory,
     op: String,
 }
 
 impl Value {
-    pub(crate) fn new(data: f64, gradient_fn: GradientFactory) -> Self {
-        Self { grad: gradient_fn(), children: vec![], data, backward_fn: None, gradient_fn, op: "".to_string() }
+    pub(crate) fn new(data: f64, gradient_fn: GradientDataFactory) -> Self {
+        Self { grad_data: gradient_fn(data), children: vec![], backward_fn: None, gradient_fn, op: "".to_string() }
     }
 
     /// Returns underlying data.
     pub fn get_data(&self) -> f64 {
-        self.data
+        self.grad_data.borrow().data
     }
 
     pub fn set_data(&mut self, value: f64) {
-        self.data = value;
+        self.grad_data.borrow_mut().data = value;
     }
 
     /// Returns a gradient.
     pub fn get_grad(&self) -> f64 {
-        *self.grad.borrow()
+        self.grad_data.borrow().grad
     }
 
     /// Sets gradient to zero.
     pub fn zero_grad(&mut self) {
-        *self.grad.borrow_mut() = 0.;
+        self.grad_data.borrow_mut().grad = 0.;
     }
 
     /// Applies gradients.
@@ -66,7 +76,7 @@ impl Value {
         build_topo(self, &topo, &visited);
 
         // go one variable at a time and apply the chain rule to get its gradient
-        *self.grad.borrow_mut() = 1.;
+        self.grad_data.borrow_mut().grad = 1.;
         topo.borrow().iter().rev().filter_map(|v| v.backward_fn.as_ref()).for_each(|backward| backward());
     }
 }
@@ -74,47 +84,38 @@ impl Value {
 mod gradients {
     use super::*;
 
-    pub fn add(lhs: (&Gradient, f64), rhs: (&Gradient, f64), out: (f64, f64)) {
-        let (out_grad, _) = out;
+    pub(crate) fn add(lhs: &SharedGradientData, rhs: &SharedGradientData, out: &SharedGradientData) {
+        let out_grad = out.borrow().grad;
 
-        if Rc::ptr_eq(lhs.0, rhs.0) {
-            let mut lhs_grad = lhs.0.borrow_mut();
-            *lhs_grad += 2. * out_grad;
+        if Rc::ptr_eq(lhs, rhs) {
+            lhs.borrow_mut().grad += 2. * out_grad;
         } else {
-            let (mut lhs_grad, mut rhs_grad) = (lhs.0.borrow_mut(), rhs.0.borrow_mut());
-
-            *lhs_grad += out_grad;
-            *rhs_grad += out_grad;
+            lhs.borrow_mut().grad += out_grad;
+            rhs.borrow_mut().grad += out_grad;
         }
     }
 
-    pub fn mul(lhs: (&Gradient, f64), rhs: (&Gradient, f64), out: (f64, f64)) {
-        let (out_grad, _) = out;
+    pub(crate) fn mul(lhs: &SharedGradientData, rhs: &SharedGradientData, out: &SharedGradientData) {
+        let out_grad = out.borrow().grad;
 
-        if Rc::ptr_eq(lhs.0, rhs.0) {
-            let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
-            *lhs_grad += 2. * (lhs_data * out_grad);
+        if Rc::ptr_eq(lhs, rhs) {
+            let lhs_data = lhs.borrow().data;
+            lhs.borrow_mut().grad += 2. * (lhs_data * out_grad);
         } else {
-            let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
-            let (mut rhs_grad, rhs_data) = (rhs.0.borrow_mut(), rhs.1);
-
-            *lhs_grad += rhs_data * out_grad;
-            *rhs_grad += lhs_data * out_grad;
+            lhs.borrow_mut().grad += rhs.borrow().data * out_grad;
+            rhs.borrow_mut().grad += lhs.borrow().data * out_grad;
         }
     }
 
-    pub fn powf(lhs: (&Gradient, f64), rhs: f64, out: (&Gradient, f64)) {
-        let (mut lhs_grad, lhs_data) = (lhs.0.borrow_mut(), lhs.1);
-        let (out_grad, _) = (*out.0.borrow(), out.1);
-
-        *lhs_grad += (rhs * lhs_data.powf(rhs - 1.)) * out_grad;
+    pub(crate) fn powf(lhs: &SharedGradientData, rhs: f64, out: &SharedGradientData) {
+        let lhs_data = lhs.borrow().data;
+        lhs.borrow_mut().grad += (rhs * lhs_data.powf(rhs - 1.)) * out.borrow().grad;
     }
 
-    pub fn relu(lhs: (&Gradient, f64), out: (&Gradient, f64)) {
-        let (mut lhs_grad, _) = (lhs.0.borrow_mut(), lhs.1);
-        let (out_grad, out_data) = (*out.0.borrow(), out.1);
+    pub(crate) fn relu(lhs: &SharedGradientData, out: &SharedGradientData) {
+        let out = out.borrow();
 
-        *lhs_grad += if out_data > 0. { out_grad } else { 0. };
+        lhs.borrow_mut().grad += if out.data > 0. { out.grad } else { 0. };
     }
 }
 
@@ -132,26 +133,21 @@ macro_rules! custom_operator_impl {
     (use $fn_name: ident for $type_: ident { fn $method: ident$( with $v:tt: $t:ty)? }) => {
         impl $type_ {
             pub fn $method(&self$(, $v: $t)?) -> $type_ {
-                let data = scalars::$fn_name(self.data $(,$v)?);
-                let grad = self.gradient_fn.deref()();
-                let (lhs_grad, out_grad) = (Rc::downgrade(&self.grad), Rc::downgrade(&grad));
-                let lhs_data = self.data;
+                let grad_data = self.gradient_fn.deref()(scalars::$fn_name(self.get_data() $(,$v)?));
+
+                let (lhs_gd, out_gd) = (Rc::downgrade(&self.grad_data), Rc::downgrade(&grad_data));
 
                 let backward_fn: Option<BackwardFn> = Some(Rc::new(Box::new(move || {
-                    lhs_grad.upgrade().zip(out_grad.upgrade()).iter()
-                        .for_each(|(lhs_grad, out_grad)| {
-                            gradients::$fn_name(
-                                (lhs_grad, lhs_data),
-                                $($v,)?
-                                (out_grad, data)
-                            );
+                    lhs_gd.upgrade().zip(out_gd.upgrade()).iter()
+                        .for_each(|(lhs_gd, out_gd)| {
+                            gradients::$fn_name(lhs_gd, $($v,)? out_gd);
                         });
                 })));
 
                 let op = String::from(stringify!($method));
                 let gradient_fn = self.gradient_fn.clone();
 
-                Value { grad, children: vec![self.clone()], data, backward_fn, gradient_fn, op }
+                Value { grad_data, children: vec![self.clone()], backward_fn, gradient_fn, op }
             }
         }
     };
@@ -160,27 +156,27 @@ macro_rules! custom_operator_impl {
 macro_rules! binary_operator_impl {
     (impl $op:tt for $type_: ident with fn $method: ident and reverse $op_rev:tt fn $method_rev: ident by ($reverse_val: ident, $reverse_arg: ident) ) => {
         fn $method(lhs: &$type_, rhs: &$type_) -> $type_ {
-            let data = lhs.data.$method(&rhs.data);
-            let grad = lhs.gradient_fn.deref()();
-
-            let (lhs_data, rhs_data) = (lhs.data, rhs.data);
-            let (lhs_grad, rhs_grad, out_grad) =
-                (Rc::downgrade(&lhs.grad), Rc::downgrade(&rhs.grad), Rc::downgrade(&grad));
+            let grad_data = lhs.gradient_fn.deref()(lhs.get_data().$method(&rhs.get_data()));
+            let (lhs_gd, rhs_gd, out_gd) =
+                (Rc::downgrade(&lhs.grad_data), Rc::downgrade(&rhs.grad_data), Rc::downgrade(&grad_data));
 
             let backward_fn: Option<BackwardFn> = Some(Rc::new(Box::new(move || {
-                lhs_grad.upgrade().zip(rhs_grad.upgrade()).zip(out_grad.upgrade()).iter().for_each(
-                    |((lhs_grad, rhs_grad), out_grad)| {
-                        gradients::$method((lhs_grad, lhs_data), (rhs_grad, rhs_data), (*out_grad.borrow(), data));
+                lhs_gd.upgrade().zip(rhs_gd.upgrade()).zip(out_gd.upgrade()).iter().for_each(
+                    |((lhs_gd, rhs_gd), out_gd)| {
+                        gradients::$method(lhs_gd, rhs_gd, out_gd);
                     },
                 );
             })));
 
             let op = String::from(stringify!($method));
             let gradient_fn = lhs.gradient_fn.clone();
-            let children =
-                if Rc::ptr_eq(&lhs.grad, &rhs.grad) { vec![lhs.clone()] } else { vec![lhs.clone(), rhs.clone()] };
+            let children = if Rc::ptr_eq(&lhs.grad_data, &rhs.grad_data) {
+                vec![lhs.clone()]
+            } else {
+                vec![lhs.clone(), rhs.clone()]
+            };
 
-            Value { grad, children, data, backward_fn, gradient_fn, op }
+            Value { grad_data, children, backward_fn, gradient_fn, op }
         }
 
         fn $method_rev(lhs: &$type_, rhs: &$type_) -> $type_ {
@@ -213,13 +209,13 @@ custom_operator_impl! { use relu for Value { fn relu } }
 
 impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.grad.as_ref() as *const RefCell<f64>).hash(state)
+        (self.grad_data.as_ref() as *const RefCell<GradientData>).hash(state)
     }
 }
 
 impl PartialEq<Self> for Value {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.grad, &other.grad)
+        Rc::ptr_eq(&self.grad_data, &other.grad_data)
     }
 }
 
@@ -227,7 +223,7 @@ impl Eq for Value {}
 
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("Value[data={}, grad={}]", self.data, self.get_grad()))
+        f.write_fmt(format_args!("Value[data={}, grad={}]", self.get_data(), self.get_grad()))
     }
 }
 
