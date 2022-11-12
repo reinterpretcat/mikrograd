@@ -36,6 +36,10 @@ impl Value {
         self.data
     }
 
+    pub fn set_data(&mut self, value: f64) {
+        self.data = value;
+    }
+
     /// Returns a gradient.
     pub fn get_grad(&self) -> f64 {
         *self.grad.borrow()

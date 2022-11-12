@@ -59,13 +59,29 @@ fn loss(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model: &MLP) -> (V
 }
 
 fn main() {
-    let model = mikrograd::new_mlp(2, &[16, 16, 1]);
+    let mut model = mikrograd::new_mlp(2, &[16, 16, 1]);
 
     println!("{}", model);
     println!("number of parameters: {}", model.parameters().count());
 
     let (x_data, y_labels) = make_moons(11);
-    let (total_loss, accuracy) = loss(&x_data, &y_labels, &model);
 
-    println!("{} {}", total_loss, accuracy);
+    // optimization
+    for k in 0..10 {
+        // forward
+        let (total_loss, accuracy) = loss(&x_data, &y_labels, &model);
+
+        // backward
+        model.zero_grad();
+        total_loss.backward();
+
+        // update (sgd)
+        let learning_rate = 1. - 0.9 * k as f64 / 100.;
+
+        for p in model.parameters_mut() {
+            p.set_data(p.get_data() - learning_rate * p.get_grad());
+        }
+
+        println!("step {} loss {}, accuracy {:.2}%", k, total_loss.get_data(), accuracy * 100.);
+    }
 }

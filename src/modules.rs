@@ -11,6 +11,7 @@ use std::iter::once;
 pub trait Module: Display {
     fn zero_grad(&mut self);
     fn parameters(&self) -> Box<dyn Iterator<Item = &Value> + '_>;
+    fn parameters_mut(&mut self) -> Box<dyn Iterator<Item = &mut Value> + '_>;
 }
 
 #[derive(Clone, Debug)]
@@ -51,6 +52,10 @@ impl Module for Neuron {
     fn parameters(&self) -> Box<dyn Iterator<Item = &Value> + '_> {
         Box::new(self.w.iter().chain(once(&self.b)))
     }
+
+    fn parameters_mut(&mut self) -> Box<dyn Iterator<Item = &mut Value> + '_> {
+        Box::new(self.w.iter_mut().chain(once(&mut self.b)))
+    }
 }
 
 impl Display for Neuron {
@@ -85,6 +90,10 @@ impl Module for Layer {
 
     fn parameters(&self) -> Box<dyn Iterator<Item = &Value> + '_> {
         Box::new(self.neurons.iter().flat_map(|neuron| neuron.parameters()))
+    }
+
+    fn parameters_mut(&mut self) -> Box<dyn Iterator<Item = &mut Value> + '_> {
+        Box::new(self.neurons.iter_mut().flat_map(|neuron| neuron.parameters_mut()))
     }
 }
 
@@ -129,6 +138,10 @@ impl Module for MLP {
 
     fn parameters(&self) -> Box<dyn Iterator<Item = &Value> + '_> {
         Box::new(self.layers.iter().flat_map(|layer| layer.parameters()))
+    }
+
+    fn parameters_mut(&mut self) -> Box<dyn Iterator<Item = &mut Value> + '_> {
+        Box::new(self.layers.iter_mut().flat_map(|layer| layer.parameters_mut()))
     }
 }
 
