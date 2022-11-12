@@ -31,3 +31,18 @@ fn can_create_mlp() {
     assert_eq!(layer.layers.len(), 2 + 1);
     assert_eq!(layer.parameters().count(), 337);
 }
+
+#[test]
+fn can_process_data_in_neuron() {
+    let gradient_fn = create_dummy_grad();
+    let neuron = Neuron {
+        w: vec![Value::new(10., gradient_fn.clone()), Value::new(100., gradient_fn.clone())],
+        b: Value::new(3., gradient_fn.clone()),
+        ntype: NeuronType::Linear,
+    };
+
+    let result = neuron.call(&[Value::new(1.2, gradient_fn.clone()), Value::new(1.3, gradient_fn.clone())]);
+
+    assert_eq!(result.get_data(), 145.);
+    assert_eq!(result.get_grad(), 0.);
+}
