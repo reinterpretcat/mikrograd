@@ -37,7 +37,11 @@ impl Neuron {
     }
 
     pub fn call(&self, x: &[Value]) -> Value {
-        self.w.iter().zip(x).map(|(wi, xi)| wi * xi).sum::<Value>() + &self.b
+        let act = self.w.iter().zip(x).map(|(wi, xi)| wi * xi).sum::<Value>() + &self.b;
+        match self.ntype {
+            NeuronType::Linear => act,
+            NeuronType::ReLU => act.relu(),
+        }
     }
 }
 
