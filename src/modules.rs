@@ -15,8 +15,8 @@ pub trait Module: Display {
 
 #[derive(Clone, Debug)]
 pub enum NeuronType {
-    ReLU,
     Linear,
+    ReLU,
 }
 
 #[derive(Debug)]
@@ -47,9 +47,7 @@ impl Neuron {
 
 impl Module for Neuron {
     fn zero_grad(&mut self) {
-        self.w.iter_mut().chain(once(&mut self.b)).for_each(|value| {
-            value.zero_grad();
-        });
+        self.parameters_mut().for_each(|p| p.zero_grad())
     }
 
     fn parameters(&self) -> Box<dyn Iterator<Item = &Value> + '_> {
@@ -88,7 +86,7 @@ impl Layer {
 
 impl Module for Layer {
     fn zero_grad(&mut self) {
-        self.neurons.iter_mut().for_each(|neuron| neuron.zero_grad());
+        self.parameters_mut().for_each(|p| p.zero_grad())
     }
 
     fn parameters(&self) -> Box<dyn Iterator<Item = &Value> + '_> {
@@ -136,7 +134,7 @@ impl MLP {
 
 impl Module for MLP {
     fn zero_grad(&mut self) {
-        self.layers.iter_mut().for_each(|layer| layer.zero_grad());
+        self.parameters_mut().for_each(|p| p.zero_grad())
     }
 
     fn parameters(&self) -> Box<dyn Iterator<Item = &Value> + '_> {
