@@ -37,7 +37,7 @@ impl Neuron {
     }
 
     pub fn call(&self, x: &[Value]) -> Value {
-        self.w.iter().zip(x).fold(self.b.clone(), |acc, (wi, xi)| &acc + wi * xi)
+        self.w.iter().zip(x).map(|(wi, xi)| wi * xi).sum::<Value>() + &self.b
     }
 }
 

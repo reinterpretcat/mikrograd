@@ -1,5 +1,6 @@
 use mikrograd::{Module, Value, MLP};
 use ndarray::prelude::*;
+use plotters::prelude::*;
 
 /// Generate test data.
 fn make_moons(n_samples: usize) -> (Array<f64, Ix2>, Array<f64, Ix1>) {
@@ -59,9 +60,9 @@ fn loss(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model: &MLP) -> (V
     return (total_loss, accuracy);
 }
 
-fn run_optimization(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model: &mut MLP, steps: usize) {
+fn run_optimization(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model: &mut MLP, n_opt_steps: usize) {
     // optimization
-    for k in 0..steps {
+    for k in 0..n_opt_steps {
         // forward
         let (total_loss, accuracy) = loss(&x_data, &y_labels, &model);
 
@@ -71,7 +72,6 @@ fn run_optimization(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model:
 
         // update (sgd)
         let learning_rate = 1. - 0.9 * k as f64 / 100.;
-
         for p in model.parameters_mut() {
             p.set_data(p.get_data() - learning_rate * p.get_grad());
         }
@@ -80,7 +80,79 @@ fn run_optimization(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model:
     }
 }
 
-fn main() {
+fn visualize_results(
+    _x_data: &Array<f64, Ix2>,
+    _y_labels: &Array<f64, Ix1>,
+    model: &MLP,
+    image_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    const POINTS: usize = 100;
+
+    let root = BitMapBackend::new(image_path, (640, 640)).into_drawing_area();
+    root.fill(&WHITE)?;
+
+    let min_x = -2.;
+    let max_x = 2.;
+    let min_y = -2.;
+    let max_y = 2.;
+
+    let step_x = (max_x - min_x) / POINTS as f64;
+    let step_y = (max_y - min_y) / POINTS as f64;
+
+    let mut chart = ChartBuilder::on(&root)
+        .caption("Matshow Example", ("sans-serif", 40))
+        .margin(5)
+        .top_x_label_area_size(40)
+        .y_label_area_size(40)
+        .build_cartesian_2d(min_x..max_x, min_y..max_y)?;
+
+    chart
+        .configure_mesh()
+        .x_labels(10)
+        .y_labels(15)
+        .max_light_lines(4)
+        .x_label_offset(35)
+        .y_label_offset(25)
+        .disable_x_mesh()
+        .disable_y_mesh()
+        .label_style(("sans-serif", 20))
+        .draw()?;
+
+    #[derive(Copy, Clone, Default)]
+    struct MatrixPoint {
+        coords: [(f64, f64); 2],
+        prediction: f64,
+    }
+    let mut matrix = Vec::with_capacity(POINTS);
+
+    for x in 0..POINTS {
+        matrix.push(Vec::with_capacity(POINTS));
+        for y in 0..POINTS {
+            let coord_1 = (min_x + x as f64 * step_x, min_y + y as f64 * step_y);
+            let coord_2 = (coord_1.0 + step_x, coord_1.1 + step_y);
+            let point_x = coord_1.0 + step_x / 2.;
+            let point_y = coord_1.1 + step_y / 2.;
+
+            let prediction =
+                model.call(&[mikrograd::new_value(point_x), mikrograd::new_value(point_y)]).first().unwrap().get_data();
+            matrix[x].push(MatrixPoint { coords: [coord_1, coord_2], prediction });
+        }
+    }
+
+    chart.draw_series(matrix.iter().flat_map(|points| points.iter()).map(|point| {
+        let color = if point.prediction > 0. { RGBColor(255, 0, 0).filled() } else { RGBColor(0, 0, 255).filled() };
+        Rectangle::new(point.coords, color)
+    }))?;
+
+    root.present().expect("Unable to write result to file");
+    println!("Result has been saved to {}", image_path);
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let n_samples = 100;
+    let n_opt_steps = 10;
     let mut model = mikrograd::new_mlp(2, &[16, 16, 1]);
 
     println!("{}", model);
@@ -90,5 +162,8 @@ fn main() {
     let (x_data, y_labels) = make_moons(100);
 
     // run gradient descent optimization
-    run_optimization(&x_data, &y_labels, &mut model, 100);
+    run_optimization(&x_data, &y_labels, &mut model, n_opt_steps);
+
+    // generate and store bitmap
+    visualize_results(&x_data, &y_labels, &model, format!("moons_{}.png", n_samples).as_str())
 }

@@ -4,6 +4,8 @@ pub use self::modules::*;
 mod value;
 pub use self::value::Value;
 
+// TODO add prelude
+
 pub fn new_mlp(nin: usize, nouts: &[usize]) -> MLP {
     MLP::new(nin, nouts)
 }
