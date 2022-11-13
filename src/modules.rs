@@ -128,7 +128,10 @@ impl MLP {
 
     pub fn call(&self, x: &[Value]) -> Vec<Value> {
         let mut iterator = self.layers.iter();
-        iterator.next().map(|first| iterator.fold(first.call(x), |_, layer| layer.call(x))).unwrap_or_default()
+        iterator
+            .next()
+            .map(|first| iterator.fold(first.call(x), |acc, layer| layer.call(acc.as_slice())))
+            .unwrap_or_default()
     }
 }
 

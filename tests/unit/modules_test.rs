@@ -19,10 +19,10 @@ fn can_create_layer() {
 
 #[test]
 fn can_create_mlp() {
-    let layer = MLP::new(2, &[16, 16, 1]);
+    let mlp = MLP::new(2, &[16, 16, 1]);
 
-    assert_eq!(layer.layers.len(), 2 + 1);
-    assert_eq!(layer.parameters().count(), 337);
+    assert_eq!(mlp.layers.len(), 2 + 1);
+    assert_eq!(mlp.parameters().count(), 337);
 }
 
 #[test]
