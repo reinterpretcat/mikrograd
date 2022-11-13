@@ -136,10 +136,9 @@ macro_rules! custom_operator_impl {
 
                 let backward_fn: Option<BackwardFn> = Some(Rc::new(Box::new(move || {
                     lhs_gd.upgrade().zip(out_gd.upgrade()).iter()
-                        .for_each(|(lhs_gd, out_gd)| {
-                            gradients::$fn_name(lhs_gd, $($v,)? out_gd);
-                        });
-                })));
+                        .for_each(|(lhs_gd, out_gd)| gradients::$fn_name(lhs_gd, $($v,)? out_gd))
+                    })
+                ));
 
                 let op = String::from(stringify!($method));
                 Value { grad_data, children: vec![self.clone()], backward_fn, op }
@@ -156,11 +155,12 @@ macro_rules! binary_operator_impl {
                 (Rc::downgrade(&lhs.grad_data), Rc::downgrade(&rhs.grad_data), Rc::downgrade(&grad_data));
 
             let backward_fn: Option<BackwardFn> = Some(Rc::new(Box::new(move || {
-                lhs_gd.upgrade().zip(rhs_gd.upgrade()).zip(out_gd.upgrade()).iter().for_each(
-                    |((lhs_gd, rhs_gd), out_gd)| {
-                        gradients::$method(lhs_gd, rhs_gd, out_gd);
-                    },
-                );
+                lhs_gd
+                    .upgrade()
+                    .zip(rhs_gd.upgrade())
+                    .zip(out_gd.upgrade())
+                    .iter()
+                    .for_each(|((lhs_gd, rhs_gd), out_gd)| gradients::$method(lhs_gd, rhs_gd, out_gd))
             })));
 
             let op = String::from(stringify!($method));
