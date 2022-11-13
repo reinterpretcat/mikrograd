@@ -133,9 +133,13 @@ fn can_calculate_reference_gradients() {
     let z = 2. * &x + 2. + &x;
     let q = z.relu() + &z * &x;
     let h = (&z * &z).relu();
-    let y = h + &q + q * &x;
+    let y = &h + &q + q * &x;
     y.backward();
 
     assert_eq!(x.get_grad(), 46.);
+    assert_eq!(x.get_data(), -4.);
     assert_eq!(y.get_grad(), 1.);
+    assert_eq!(y.get_data(), -20.);
+    assert_eq!(z.get_data(), -10.);
+    assert_eq!(h.get_data(), 100.);
 }
