@@ -81,7 +81,7 @@ fn run_optimization(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model:
 }
 
 fn visualize_results(
-    _x_data: &Array<f64, Ix2>,
+    x_data: &Array<f64, Ix2>,
     _y_labels: &Array<f64, Ix1>,
     model: &MLP,
     image_path: &str,
@@ -143,6 +143,13 @@ fn visualize_results(
         let color = if point.prediction > 0. { RGBColor(255, 0, 0).filled() } else { RGBColor(0, 0, 255).filled() };
         Rectangle::new(point.coords, color)
     }))?;
+
+    chart
+        .draw_series(x_data.map_axis(Axis(1), |data| {
+            // TODO use different colors depending on labels
+            TriangleMarker::new((data[0], data[1]), 5, &YELLOW)
+        }))
+        .unwrap();
 
     root.present().expect("Unable to write result to file");
     println!("Result has been saved to {}", image_path);
