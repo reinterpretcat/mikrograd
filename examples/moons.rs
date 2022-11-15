@@ -43,7 +43,7 @@ fn loss(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model: &MLP) -> (V
     let scores = inputs.mapv(|input| model.call(input.as_slice().unwrap())[0].clone());
 
     //svm "max-margin" loss
-    let losses = ndarray::Zip::from(y_labels).and(&scores).map_collect(|yi, scorei| (1. + -1. * yi * scorei).relu());
+    let losses = ndarray::Zip::from(y_labels).and(&scores).map_collect(|&yi, scorei| (1. + -yi * scorei).relu());
     let losses_len = losses.len() as f64;
     let data_loss = losses.into_iter().sum::<Value>() / losses_len;
 
@@ -92,7 +92,7 @@ fn visualize_results(
     root.fill(&WHITE)?;
 
     let min_x = -2.;
-    let max_x = 2.;
+    let max_x = 3.;
     let min_y = -2.;
     let max_y = 2.;
 
@@ -100,7 +100,6 @@ fn visualize_results(
     let step_y = (max_y - min_y) / POINTS as f64;
 
     let mut chart = ChartBuilder::on(&root)
-        .caption("Matshow Example", ("sans-serif", 40))
         .margin(5)
         .top_x_label_area_size(40)
         .y_label_area_size(40)
@@ -108,11 +107,8 @@ fn visualize_results(
 
     chart
         .configure_mesh()
-        .x_labels(10)
-        .y_labels(15)
-        .max_light_lines(4)
-        .x_label_offset(35)
-        .y_label_offset(25)
+        .x_labels(15)
+        .y_labels(10)
         .disable_x_mesh()
         .disable_y_mesh()
         .label_style(("sans-serif", 20))
@@ -166,7 +162,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("number of parameters: {}", model.parameters().count());
 
     // generate test data
-    let (x_data, y_labels) = make_moons(100);
+    let (x_data, y_labels) = make_moons(n_samples);
+
+    let (total_loss, accuracy) = loss(&x_data, &y_labels, &model);
+    println!("{}{}", total_loss, accuracy);
 
     // run gradient descent optimization
     run_optimization(&x_data, &y_labels, &mut model, n_opt_steps);
