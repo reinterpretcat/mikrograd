@@ -48,7 +48,7 @@ fn loss(x_data: &Array<f64, Ix2>, y_labels: &Array<f64, Ix1>, model: &MLP) -> (V
     let data_loss = losses.into_iter().sum::<Value>() / losses_len;
 
     // L2 regularization
-    let alpha = 1E-4;
+    let alpha = 1E-5;
     let reg_loss = alpha * model.parameters().map(|p| p * p).sum::<Value>();
     let total_loss = data_loss + reg_loss;
 
@@ -155,7 +155,7 @@ fn visualize_results(
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let n_samples = 100;
-    let n_opt_steps = 10;
+    let n_opt_steps = 30;
     let mut model = mikrograd::new_mlp(2, &[16, 16, 1]);
 
     println!("{}", model);
